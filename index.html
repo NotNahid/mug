@@ -1,0 +1,702 @@
+<!--
+================================================================================
+  3D CERAMIC MUG PREVIEW APPLICATION
+================================================================================
+
+  HOW TO HOST ON GITHUB PAGES:
+  1. Create a new GitHub repository (e.g., "3d-mug-preview")
+  2. Place index.html and image.png in the repository root
+  3. Go to Settings → Pages → Source → select "main" branch → Save
+  4. Your site will be live at: https://<username>.github.io/<repo-name>/
+  5. Wait 1-2 minutes for deployment, then visit the URL
+
+  FILE STRUCTURE:
+  /your-folder/
+    ├── index.html    (this file)
+    └── image.png     (your mug design - recommended 2700x1200px for 11oz)
+
+  IMPORTANT: You must run this through a local server, NOT by double-clicking.
+  Browsers block local file loading for security (CORS).
+  Easy ways to run a local server:
+    - VS Code: Install "Live Server" extension, right-click → Open with Live Server
+    - Python:  python -m http.server 8000    (then open http://localhost:8000)
+    - Node:    npx serve .                   (then open http://localhost:3000)
+    - PHP:     php -S localhost:8000
+
+  RECOMMENDED IMAGE SIZE:
+  - 11oz mug: 2700 x 1200 pixels
+  - 15oz mug: 2700 x 1400 pixels
+
+  HOW TO MODIFY MUG SIZE:
+  - Search for "MUG DIMENSIONS" below
+  - Adjust MUG_RADIUS, MUG_HEIGHT, MUG_THICKNESS, HANDLE_SCALE
+
+================================================================================
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Mug Preview</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: #e8e4df;
+            overflow: hidden;
+            height: 100vh;
+            width: 100vw;
+            color: #333;
+        }
+
+        #ui-overlay {
+            position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+            background: rgba(255,255,255,0.95);
+            backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+            border-bottom: 1px solid rgba(0,0,0,0.08);
+            padding: 12px 24px;
+            display: flex; align-items: center; justify-content: space-between;
+            flex-wrap: wrap; gap: 10px;
+        }
+        #ui-overlay h1 { font-size: 18px; font-weight: 700; color: #1a1a1a; letter-spacing: -0.3px; }
+        #ui-overlay h1 span { color: #888; font-weight: 400; font-size: 13px; margin-left: 8px; }
+        .controls-group { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+
+        .upload-btn {
+            display: inline-flex; align-items: center; gap: 8px;
+            padding: 10px 20px; background: #1a1a1a; color: white; border: none;
+            border-radius: 10px; font-family: 'Inter', sans-serif; font-size: 14px;
+            font-weight: 500; cursor: pointer; transition: all 0.2s ease;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+        }
+        .upload-btn:hover { background: #333; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
+        .upload-btn:active { transform: translateY(0); }
+        .upload-btn svg { width: 18px; height: 18px; }
+        #file-input { display: none; }
+
+        .toggle-container {
+            display: flex; align-items: center; gap: 10px;
+            padding: 6px 16px; background: rgba(0,0,0,0.04); border-radius: 10px;
+        }
+        .toggle-label { font-size: 13px; font-weight: 500; color: #555; user-select: none; }
+        .toggle-switch { position: relative; width: 48px; height: 26px; cursor: pointer; }
+        .toggle-switch input { opacity: 0; width: 0; height: 0; }
+        .toggle-slider {
+            position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+            background: #1a1a1a; border-radius: 13px; transition: all 0.3s ease;
+        }
+        .toggle-slider::before {
+            content: ''; position: absolute; width: 20px; height: 20px;
+            left: 3px; bottom: 3px; background: white; border-radius: 50%;
+            transition: all 0.3s ease;
+        }
+        .toggle-switch input:checked + .toggle-slider { background: #4CAF50; }
+        .toggle-switch input:checked + .toggle-slider::before { transform: translateX(22px); }
+        .toggle-status { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; min-width: 28px; }
+        .toggle-status.off { color: #1a1a1a; }
+        .toggle-status.on { color: #4CAF50; }
+
+        .color-picker-group {
+            display: flex; align-items: center; gap: 8px;
+            padding: 6px 16px; background: rgba(0,0,0,0.04); border-radius: 10px;
+        }
+        .color-picker-group label { font-size: 13px; font-weight: 500; color: #555; }
+        #mug-color { width: 30px; height: 30px; border: 2px solid #ddd; border-radius: 6px; cursor: pointer; padding: 0; background: none; }
+
+        .slider-group {
+            display: flex; align-items: center; gap: 10px;
+            padding: 6px 16px; background: rgba(0,0,0,0.04); border-radius: 10px;
+        }
+        .slider-group label { font-size: 13px; font-weight: 500; color: #555; white-space: nowrap; user-select: none; }
+        .slider-group input[type="range"] {
+            -webkit-appearance: none; appearance: none; width: 120px; height: 6px;
+            border-radius: 3px; background: linear-gradient(to right, #ccc, #888);
+            outline: none; cursor: pointer;
+        }
+        .slider-group input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none; appearance: none; width: 18px; height: 18px;
+            border-radius: 50%; background: #1a1a1a; cursor: pointer;
+            border: 2px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+        }
+        .slider-group input[type="range"]::-moz-range-thumb {
+            width: 18px; height: 18px; border-radius: 50%; background: #1a1a1a;
+            cursor: pointer; border: 2px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+        }
+        .slider-value { font-size: 12px; font-weight: 600; color: #333; min-width: 36px; text-align: right; font-variant-numeric: tabular-nums; }
+
+        #controls-row-2 {
+            position: fixed; top: 64px; left: 0; right: 0; z-index: 99;
+            background: rgba(248,246,243,0.97);
+            backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+            border-bottom: 1px solid rgba(0,0,0,0.06);
+            padding: 8px 24px;
+            display: flex; align-items: center; justify-content: center;
+            gap: 16px; flex-wrap: wrap;
+        }
+
+        #canvas-container { width: 100vw; height: 100vh; }
+        canvas { display: block; }
+
+        #info-tooltip {
+            position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+            background: rgba(0,0,0,0.8); color: white; padding: 10px 20px;
+            border-radius: 10px; font-size: 13px; font-weight: 400;
+            pointer-events: none; opacity: 0; transition: opacity 0.5s ease;
+            z-index: 50; backdrop-filter: blur(10px); max-width: 90vw; text-align: center;
+        }
+        #info-tooltip.visible { opacity: 1; }
+
+        #loading {
+            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            z-index: 200; display: none; text-align: center;
+        }
+        .spinner {
+            width: 40px; height: 40px; border: 3px solid rgba(0,0,0,0.1);
+            border-top-color: #1a1a1a; border-radius: 50%;
+            animation: spin 0.8s linear infinite; margin: 0 auto 10px;
+        }
+        .loading-text { font-size: 13px; color: #666; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        @media (max-width: 768px) {
+            #ui-overlay { padding: 10px 12px; justify-content: center; }
+            #ui-overlay h1 span { display: none; }
+            .upload-btn { padding: 8px 14px; font-size: 13px; }
+            .slider-group input[type="range"] { width: 80px; }
+            #controls-row-2 { top: auto; bottom: 0; padding: 10px 12px; border-bottom: none; border-top: 1px solid rgba(0,0,0,0.06); }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="ui-overlay">
+        <h1>3D Mug Preview <span>Drag to rotate · Scroll to zoom</span></h1>
+        <div class="controls-group">
+            <div class="color-picker-group">
+                <label for="mug-color">Mug Color</label>
+                <input type="color" id="mug-color" value="#ffffff">
+            </div>
+            <div class="toggle-container">
+                <span class="toggle-label">Magic Mug</span>
+                <label class="toggle-switch">
+                    <input type="checkbox" id="magic-toggle" checked>
+                    <span class="toggle-slider"></span>
+                </label>
+                <span class="toggle-status on" id="toggle-status">ON</span>
+            </div>
+            <button class="upload-btn" onclick="document.getElementById('file-input').click()">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                    <polyline points="17 8 12 3 7 8"/>
+                    <line x1="12" y1="3" x2="12" y2="15"/>
+                </svg>
+                Replace Image
+            </button>
+            <input type="file" id="file-input" accept="image/png,image/jpeg,image/webp">
+        </div>
+    </div>
+
+    <div id="controls-row-2">
+        <div class="slider-group">
+            <label for="offset-x-slider">Texture Offset X</label>
+            <input type="range" id="offset-x-slider" min="0" max="1" step="0.001" value="0.217">
+            <span class="slider-value" id="offset-x-value">0.217</span>
+        </div>
+        <div class="slider-group">
+            <label for="offset-y-slider">Offset Y</label>
+            <input type="range" id="offset-y-slider" min="-0.5" max="0.5" step="0.001" value="0">
+            <span class="slider-value" id="offset-y-value">0.000</span>
+        </div>
+        <div class="slider-group">
+            <label for="repeat-x-slider">Scale X</label>
+            <input type="range" id="repeat-x-slider" min="0.5" max="3" step="0.01" value="1">
+            <span class="slider-value" id="repeat-x-value">1.00</span>
+        </div>
+        <div class="slider-group">
+            <label for="repeat-y-slider">Scale Y</label>
+            <input type="range" id="repeat-y-slider" min="0.5" max="3" step="0.01" value="1">
+            <span class="slider-value" id="repeat-y-value">1.00</span>
+        </div>
+        <div class="slider-group">
+            <label for="rotation-slider">Rotation °</label>
+            <input type="range" id="rotation-slider" min="0" max="360" step="0.5" value="0">
+            <span class="slider-value" id="rotation-value">0.0°</span>
+        </div>
+        <button class="upload-btn" id="reset-sliders-btn" style="padding:8px 14px; font-size:12px; background:#666;">Reset</button>
+    </div>
+
+    <div id="canvas-container"></div>
+    <div id="info-tooltip"></div>
+    <div id="loading"><div class="spinner"></div><div class="loading-text">Loading...</div></div>
+
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js",
+            "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.164.1/examples/jsm/"
+        }
+    }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+        // ============================
+        // MUG DIMENSIONS
+        // ============================
+        const MUG_RADIUS = 1.0;
+        const MUG_HEIGHT = 2.4;
+        const MUG_THICKNESS = 0.08;
+        const HANDLE_SCALE = 1.0;
+        const MUG_SEGMENTS = 64;
+
+        // ============================
+        // DEFAULT IMAGE — just place "image.png" next to this HTML file
+        // ============================
+        const DEFAULT_IMAGE = './image.png';
+
+        // ============================
+        // GLOBALS
+        // ============================
+        let scene, camera, renderer, controls;
+        let mugGroup, mugBodyMesh, mugInnerMesh, mugBottomMesh, mugRimMesh, handleMesh;
+        let mugMaterial, mugTexture;
+        let isMagicMugOn = true;
+        let currentMugColor = new THREE.Color(0xffffff);
+
+        let textureOffsetX = 0.217;
+        let textureOffsetY = 0;
+        let textureRepeatX = 1;
+        let textureRepeatY = 1;
+        let textureRotation = 0;
+
+        init();
+        animate();
+
+        function init() {
+            // --- Scene: clean, no fog ---
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0xe8e4df);
+
+            // --- Camera ---
+            camera = new THREE.PerspectiveCamera(35, window.innerWidth / window.innerHeight, 0.1, 100);
+            camera.position.set(4, 3, 5);
+
+            // --- Renderer: clean, no tone mapping wash ---
+            renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            renderer.toneMapping = THREE.NoToneMapping;
+            renderer.toneMappingExposure = 1.0;
+            renderer.outputColorSpace = THREE.SRGBColorSpace;
+            document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+            // --- Orbit Controls ---
+            controls = new OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.08;
+            controls.minDistance = 3;
+            controls.maxDistance = 15;
+            controls.maxPolarAngle = Math.PI / 1.8;
+            controls.minPolarAngle = Math.PI / 8;
+            controls.target.set(0, MUG_HEIGHT / 2 - 0.3, 0);
+            controls.update();
+
+            setupLighting();
+            createGroundPlane();
+            createMug();
+            setupEventListeners();
+
+            // Auto-load image.png from same directory
+            loadDefaultImage();
+        }
+
+        // ============================
+        // LOAD DEFAULT image.png
+        // ============================
+        function loadDefaultImage() {
+            showLoading(true);
+            showTooltip('Loading image.png...', 2000);
+
+            // Test if the file exists before loading as texture
+            fetch(DEFAULT_IMAGE, { method: 'HEAD' })
+                .then(response => {
+                    if (response.ok) {
+                        applyTexture(DEFAULT_IMAGE);
+                    } else {
+                        showLoading(false);
+                        showTooltip('image.png not found. Upload an image or place image.png next to index.html.', 5000);
+                    }
+                })
+                .catch(() => {
+                    // fetch failed — probably opened via file:// protocol
+                    // Try loading anyway, Three.js TextureLoader might still work
+                    applyTexture(DEFAULT_IMAGE);
+                });
+        }
+
+        // ============================
+        // STUDIO LIGHTING — clean, balanced
+        // ============================
+        function setupLighting() {
+            const hemiLight = new THREE.HemisphereLight(0xffffff, 0xb0a090, 0.6);
+            hemiLight.position.set(0, 20, 0);
+            scene.add(hemiLight);
+
+            const keyLight = new THREE.DirectionalLight(0xffffff, 1.5);
+            keyLight.position.set(5, 8, 5);
+            keyLight.castShadow = true;
+            keyLight.shadow.mapSize.width = 2048;
+            keyLight.shadow.mapSize.height = 2048;
+            keyLight.shadow.camera.near = 0.5;
+            keyLight.shadow.camera.far = 25;
+            keyLight.shadow.camera.left = -5;
+            keyLight.shadow.camera.right = 5;
+            keyLight.shadow.camera.top = 5;
+            keyLight.shadow.camera.bottom = -5;
+            keyLight.shadow.bias = -0.0005;
+            keyLight.shadow.normalBias = 0.02;
+            keyLight.shadow.radius = 4;
+            scene.add(keyLight);
+
+            const fillLight = new THREE.DirectionalLight(0xeeeeff, 0.4);
+            fillLight.position.set(-4, 5, -3);
+            scene.add(fillLight);
+
+            const rimLight = new THREE.DirectionalLight(0xffffff, 0.3);
+            rimLight.position.set(0, 3, -6);
+            scene.add(rimLight);
+
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.25);
+            scene.add(ambientLight);
+        }
+
+        // ============================
+        // GROUND PLANE
+        // ============================
+        function createGroundPlane() {
+            const groundGeo = new THREE.PlaneGeometry(30, 30);
+            const groundMat = new THREE.MeshStandardMaterial({ color: 0xddd8d0, roughness: 0.9, metalness: 0.0 });
+            const ground = new THREE.Mesh(groundGeo, groundMat);
+            ground.rotation.x = -Math.PI / 2;
+            ground.position.y = -0.01;
+            ground.receiveShadow = true;
+            scene.add(ground);
+        }
+
+        // ============================
+        // ENVIRONMENT MAP
+        // ============================
+        function createEnvironmentMap() {
+            const envCanvas = document.createElement('canvas');
+            envCanvas.width = 512;
+            envCanvas.height = 256;
+            const ctx = envCanvas.getContext('2d');
+            const gradient = ctx.createLinearGradient(0, 0, 0, 256);
+            gradient.addColorStop(0, '#c8c0b8');
+            gradient.addColorStop(0.3, '#ddd8d0');
+            gradient.addColorStop(0.5, '#e8e4df');
+            gradient.addColorStop(0.7, '#ddd8d0');
+            gradient.addColorStop(1, '#b8b0a8');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, 512, 256);
+            const envTexture = new THREE.CanvasTexture(envCanvas);
+            envTexture.mapping = THREE.EquirectangularReflectionMapping;
+            scene.environment = envTexture;
+        }
+
+        // ============================
+        // CREATE MUG
+        // ============================
+        function createMug() {
+            mugGroup = new THREE.Group();
+
+            mugMaterial = new THREE.MeshStandardMaterial({
+                color: 0xfefefe, roughness: 0.18, metalness: 0.0, envMapIntensity: 0.3
+            });
+
+            createEnvironmentMap();
+
+            // Outer cylinder
+            const outerGeo = new THREE.CylinderGeometry(MUG_RADIUS, MUG_RADIUS * 0.95, MUG_HEIGHT, MUG_SEGMENTS, 1, true);
+            const uvAttr = outerGeo.getAttribute('uv');
+            for (let i = 0; i < uvAttr.count; i++) { uvAttr.setX(i, 1.0 - uvAttr.getX(i)); }
+            uvAttr.needsUpdate = true;
+            mugBodyMesh = new THREE.Mesh(outerGeo, mugMaterial.clone());
+            mugBodyMesh.castShadow = true;
+            mugBodyMesh.receiveShadow = true;
+            mugGroup.add(mugBodyMesh);
+
+            // Inner cylinder
+            const innerRadius = MUG_RADIUS - MUG_THICKNESS;
+            const innerGeo = new THREE.CylinderGeometry(innerRadius, innerRadius * 0.95, MUG_HEIGHT - MUG_THICKNESS, MUG_SEGMENTS, 1, true);
+            innerGeo.scale(1, 1, -1);
+            mugInnerMesh = new THREE.Mesh(innerGeo, new THREE.MeshStandardMaterial({ color: 0xf0ece6, roughness: 0.3, metalness: 0.0, side: THREE.BackSide }));
+            mugInnerMesh.position.y = MUG_THICKNESS / 2;
+            mugGroup.add(mugInnerMesh);
+
+            // Bottom
+            mugBottomMesh = new THREE.Mesh(
+                new THREE.CircleGeometry(MUG_RADIUS * 0.95, MUG_SEGMENTS),
+                new THREE.MeshStandardMaterial({ color: 0xe8e4de, roughness: 0.5, metalness: 0.0 })
+            );
+            mugBottomMesh.rotation.x = Math.PI / 2;
+            mugBottomMesh.position.y = -MUG_HEIGHT / 2;
+            mugBottomMesh.receiveShadow = true;
+            mugGroup.add(mugBottomMesh);
+
+            // Inner bottom
+            const innerBottom = new THREE.Mesh(
+                new THREE.CircleGeometry(innerRadius * 0.95, MUG_SEGMENTS),
+                new THREE.MeshStandardMaterial({ color: 0xf0ece6, roughness: 0.3, metalness: 0.0 })
+            );
+            innerBottom.rotation.x = -Math.PI / 2;
+            innerBottom.position.y = -MUG_HEIGHT / 2 + MUG_THICKNESS;
+            mugGroup.add(innerBottom);
+
+            // Rim
+            mugRimMesh = new THREE.Mesh(
+                new THREE.TorusGeometry(MUG_RADIUS - MUG_THICKNESS / 2, MUG_THICKNESS / 2, 16, MUG_SEGMENTS),
+                mugMaterial.clone()
+            );
+            mugRimMesh.rotation.x = Math.PI / 2;
+            mugRimMesh.position.y = MUG_HEIGHT / 2;
+            mugRimMesh.castShadow = true;
+            mugGroup.add(mugRimMesh);
+
+            createHandle();
+            mugGroup.position.y = MUG_HEIGHT / 2;
+            scene.add(mugGroup);
+        }
+
+        // ============================
+        // HANDLE
+        // ============================
+        function createHandle() {
+            const curve = new THREE.CubicBezierCurve3(
+                new THREE.Vector3(MUG_RADIUS * 0.97, MUG_HEIGHT * 0.32, 0),
+                new THREE.Vector3(MUG_RADIUS + 0.7 * HANDLE_SCALE, MUG_HEIGHT * 0.35, 0),
+                new THREE.Vector3(MUG_RADIUS + 0.7 * HANDLE_SCALE, -MUG_HEIGHT * 0.15, 0),
+                new THREE.Vector3(MUG_RADIUS * 0.97, -MUG_HEIGHT * 0.18, 0)
+            );
+            handleMesh = new THREE.Mesh(
+                new THREE.TubeGeometry(curve, 32, 0.1 * HANDLE_SCALE, 12, false),
+                mugMaterial.clone()
+            );
+            handleMesh.castShadow = true;
+            handleMesh.receiveShadow = true;
+            mugGroup.add(handleMesh);
+        }
+
+        // ============================
+        // APPLY TEXTURE
+        // ============================
+        function applyTexture(imagePath) {
+            const loader = new THREE.TextureLoader();
+            showLoading(true);
+
+            loader.load(
+                imagePath,
+                (texture) => {
+                    texture.wrapS = THREE.RepeatWrapping;
+                    texture.wrapT = THREE.RepeatWrapping;
+                    texture.colorSpace = THREE.SRGBColorSpace;
+                    texture.anisotropy = renderer.capabilities.getMaxAnisotropy();
+                    texture.minFilter = THREE.LinearMipmapLinearFilter;
+                    texture.magFilter = THREE.LinearFilter;
+                    texture.generateMipmaps = true;
+                    texture.center.set(0.5, 0.5);
+                    texture.offset.set(textureOffsetX, textureOffsetY);
+                    texture.repeat.set(textureRepeatX, textureRepeatY);
+                    texture.rotation = textureRotation;
+
+                    mugTexture = texture;
+                    updateMugAppearance();
+                    showLoading(false);
+                    showTooltip('Design loaded! Drag to rotate, use sliders to adjust.', 3000);
+                },
+                undefined,
+                (err) => {
+                    console.error('Texture load error:', err);
+                    showLoading(false);
+                    showTooltip('Could not load image.png — place it next to index.html and use a local server.', 5000);
+                }
+            );
+        }
+
+        // ============================
+        // TEXTURE TRANSFORM (real-time)
+        // ============================
+        function updateTextureTransform() {
+            if (!mugTexture) return;
+            mugTexture.offset.set(textureOffsetX, textureOffsetY);
+            mugTexture.repeat.set(textureRepeatX, textureRepeatY);
+            mugTexture.rotation = textureRotation;
+            mugTexture.needsUpdate = true;
+        }
+
+        // ============================
+        // MUG APPEARANCE
+        // ============================
+        function updateMugAppearance() {
+            const bodyMat = mugBodyMesh.material;
+
+            if (isMagicMugOn && mugTexture) {
+                bodyMat.map = mugTexture;
+                bodyMat.color.set(0xffffff);
+                bodyMat.roughness = 0.18;
+                bodyMat.metalness = 0.0;
+                updateTextureTransform();
+            } else if (!isMagicMugOn) {
+                bodyMat.map = null;
+                bodyMat.color.set(0x111111);
+                bodyMat.roughness = 0.12;
+                bodyMat.metalness = 0.03;
+            } else {
+                bodyMat.map = null;
+                bodyMat.color.copy(currentMugColor);
+                bodyMat.roughness = 0.18;
+                bodyMat.metalness = 0.0;
+            }
+            bodyMat.needsUpdate = true;
+
+            const baseColor = isMagicMugOn ? currentMugColor.clone() : new THREE.Color(0x111111);
+            const r = isMagicMugOn ? 0.18 : 0.12;
+
+            handleMesh.material.color.copy(baseColor);
+            handleMesh.material.roughness = r;
+            handleMesh.material.metalness = 0.0;
+            handleMesh.material.needsUpdate = true;
+
+            mugRimMesh.material.color.copy(baseColor);
+            mugRimMesh.material.roughness = r;
+            mugRimMesh.material.metalness = 0.0;
+            mugRimMesh.material.needsUpdate = true;
+        }
+
+        // ============================
+        // RESET SLIDERS (offset X defaults to 0.217)
+        // ============================
+        function resetSliders() {
+            textureOffsetX = 0.217;
+            textureOffsetY = 0;
+            textureRepeatX = 1;
+            textureRepeatY = 1;
+            textureRotation = 0;
+
+            document.getElementById('offset-x-slider').value = 0.217;
+            document.getElementById('offset-x-value').textContent = '0.217';
+            document.getElementById('offset-y-slider').value = 0;
+            document.getElementById('offset-y-value').textContent = '0.000';
+            document.getElementById('repeat-x-slider').value = 1;
+            document.getElementById('repeat-x-value').textContent = '1.00';
+            document.getElementById('repeat-y-slider').value = 1;
+            document.getElementById('repeat-y-value').textContent = '1.00';
+            document.getElementById('rotation-slider').value = 0;
+            document.getElementById('rotation-value').textContent = '0.0°';
+
+            updateTextureTransform();
+            showTooltip('Reset to defaults (Offset X: 0.217)', 2000);
+        }
+
+        // ============================
+        // EVENTS
+        // ============================
+        function setupEventListeners() {
+            // Upload replaces current image
+            document.getElementById('file-input').addEventListener('change', (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                if (!file.type.match(/image\/(png|jpeg|jpg|webp)/)) {
+                    showTooltip('Please upload a PNG, JPG, or WebP image.', 3000);
+                    return;
+                }
+                const reader = new FileReader();
+                reader.onload = (ev) => applyTexture(ev.target.result);
+                reader.readAsDataURL(file);
+            });
+
+            // Magic mug
+            document.getElementById('magic-toggle').addEventListener('change', (e) => {
+                isMagicMugOn = e.target.checked;
+                const s = document.getElementById('toggle-status');
+                s.textContent = isMagicMugOn ? 'ON' : 'OFF';
+                s.className = 'toggle-status ' + (isMagicMugOn ? 'on' : 'off');
+                updateMugAppearance();
+            });
+
+            // Mug color
+            document.getElementById('mug-color').addEventListener('input', (e) => {
+                currentMugColor.set(e.target.value);
+                updateMugAppearance();
+            });
+
+            // Sliders
+            document.getElementById('offset-x-slider').addEventListener('input', (e) => {
+                textureOffsetX = parseFloat(e.target.value);
+                document.getElementById('offset-x-value').textContent = textureOffsetX.toFixed(3);
+                updateTextureTransform();
+            });
+            document.getElementById('offset-y-slider').addEventListener('input', (e) => {
+                textureOffsetY = parseFloat(e.target.value);
+                document.getElementById('offset-y-value').textContent = textureOffsetY.toFixed(3);
+                updateTextureTransform();
+            });
+            document.getElementById('repeat-x-slider').addEventListener('input', (e) => {
+                textureRepeatX = parseFloat(e.target.value);
+                document.getElementById('repeat-x-value').textContent = textureRepeatX.toFixed(2);
+                updateTextureTransform();
+            });
+            document.getElementById('repeat-y-slider').addEventListener('input', (e) => {
+                textureRepeatY = parseFloat(e.target.value);
+                document.getElementById('repeat-y-value').textContent = textureRepeatY.toFixed(2);
+                updateTextureTransform();
+            });
+            document.getElementById('rotation-slider').addEventListener('input', (e) => {
+                const deg = parseFloat(e.target.value);
+                textureRotation = THREE.MathUtils.degToRad(deg);
+                document.getElementById('rotation-value').textContent = deg.toFixed(1) + '°';
+                updateTextureTransform();
+            });
+
+            document.getElementById('reset-sliders-btn').addEventListener('click', resetSliders);
+            window.addEventListener('resize', onWindowResize);
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        // ============================
+        // UI HELPERS
+        // ============================
+        let tooltipTimeout;
+        function showTooltip(msg, duration = 3000) {
+            const t = document.getElementById('info-tooltip');
+            t.textContent = msg;
+            t.classList.add('visible');
+            clearTimeout(tooltipTimeout);
+            tooltipTimeout = setTimeout(() => t.classList.remove('visible'), duration);
+        }
+
+        function showLoading(show) {
+            document.getElementById('loading').style.display = show ? 'block' : 'none';
+            if (show) document.querySelector('.loading-text').textContent = 'Loading...';
+        }
+    </script>
+</body>
+</html>
